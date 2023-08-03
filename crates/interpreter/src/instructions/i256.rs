@@ -1,4 +1,4 @@
-use crate::primitives::U256;
+use super::prelude::*;
 use core::cmp::Ordering;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -48,7 +48,7 @@ fn u256_remove_sign(val: &mut U256) {
 }
 
 #[inline(always)]
-pub fn two_compl_mut(op: &mut U256) {
+pub(super) fn two_compl_mut(op: &mut U256) {
     *op = two_compl(*op);
 }
 
