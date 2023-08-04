@@ -1,5 +1,9 @@
 use super::i256::{i256_div, i256_mod};
-use super::prelude::*;
+use crate::{
+    gas,
+    primitives::{Spec, U256},
+    Host, InstructionResult, Interpreter,
+};
 
 pub fn wrapped_add<H: Host>(interpreter: &mut Interpreter<'_>, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
