@@ -13,6 +13,9 @@ mod macros;
 
 extern crate alloc;
 
+#[macro_use]
+mod macros;
+
 pub mod gas;
 mod host;
 mod inner_models;
