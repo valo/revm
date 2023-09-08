@@ -1,5 +1,4 @@
 use crate::primitives::{Bytes, Spec, SpecId::*, B160, B256, U256};
-use crate::MAX_INITCODE_SIZE;
 use crate::{
     alloc::boxed::Box,
     alloc::vec::Vec,
@@ -8,6 +7,7 @@ use crate::{
     return_ok, return_revert, CallContext, CallInputs, CallScheme, CreateInputs, CreateScheme,
     Host, InstructionResult, Transfer,
 };
+use crate::{Gas, MAX_INITCODE_SIZE};
 use core::cmp::min;
 
 pub fn balance<SPEC: Spec>(interpreter: &mut Interpreter, host: &mut dyn Host) {
@@ -292,18 +292,11 @@ pub fn prepare_create_inputs<const IS_CREATE2: bool, SPEC: Spec>(
     }));
 }
 
-pub fn create<const IS_CREATE2: bool, SPEC: Spec>(
+pub fn handle_create_result(
     interpreter: &mut Interpreter,
-    host: &mut dyn Host,
+    result: (InstructionResult, Option<B160>, Gas, Bytes),
 ) {
-    let mut create_input: Option<Box<CreateInputs>> = None;
-    prepare_create_inputs::<IS_CREATE2, SPEC>(interpreter, &mut create_input);
-
-    let Some(mut create_input) = create_input else {
-        return;
-    };
-
-    let (return_reason, address, gas, return_data) = host.create(&mut create_input);
+    let (return_reason, address, gas, return_data) = result;
 
     interpreter.return_data_buffer = match return_reason {
         // Save data to return data buffer if the create reverted
@@ -333,6 +326,22 @@ pub fn create<const IS_CREATE2: bool, SPEC: Spec>(
             push_b256!(interpreter, B256::zero());
         }
     }
+}
+
+pub fn create<const IS_CREATE2: bool, SPEC: Spec>(
+    interpreter: &mut Interpreter,
+    host: &mut dyn Host,
+) {
+    let mut create_input: Option<Box<CreateInputs>> = None;
+    prepare_create_inputs::<IS_CREATE2, SPEC>(interpreter, &mut create_input);
+
+    let Some(mut create_input) = create_input else {
+        return;
+    };
+
+    let ret = host.create(&mut create_input);
+
+    handle_create_result(interpreter, ret);
 }
 
 pub fn call<SPEC: Spec>(interpreter: &mut Interpreter, host: &mut dyn Host) {
@@ -496,38 +505,15 @@ fn prepare_call_inputs<SPEC: Spec>(
     }));
 }
 
-pub fn call_inner<SPEC: Spec>(
+fn handle_call_result(
     interpreter: &mut Interpreter,
-    scheme: CallScheme,
-    host: &mut dyn Host,
+    out_offset: usize,
+    out_len: usize,
+    reason: &InstructionResult,
+    gas: &Gas,
+    return_data: &Bytes,
 ) {
-    match scheme {
-        CallScheme::DelegateCall => check!(interpreter, SPEC::enabled(HOMESTEAD)), // EIP-7: DELEGATECALL
-        CallScheme::StaticCall => check!(interpreter, SPEC::enabled(BYZANTIUM)), // EIP-214: New opcode STATICCALL
-        _ => (),
-    }
-    interpreter.return_data_buffer = Bytes::new();
-
-    let mut out_offset: usize = 0;
-    let mut out_len: usize = 0;
-    let mut call_input: Option<Box<CallInputs>> = None;
-    prepare_call_inputs::<SPEC>(
-        interpreter,
-        scheme,
-        host,
-        &mut out_len,
-        &mut out_offset,
-        &mut call_input,
-    );
-
-    let Some(mut call_input) = call_input else {
-        return;
-    };
-
-    // Call host to interact with target contract
-    let (reason, gas, return_data) = host.call(&mut call_input);
-
-    interpreter.return_data_buffer = return_data;
+    interpreter.return_data_buffer = return_data.clone();
 
     let target_len = min(out_len, interpreter.return_data_buffer.len());
 
@@ -559,4 +545,45 @@ pub fn call_inner<SPEC: Spec>(
             push!(interpreter, U256::ZERO);
         }
     }
+}
+
+pub fn call_inner<SPEC: Spec>(
+    interpreter: &mut Interpreter,
+    scheme: CallScheme,
+    host: &mut dyn Host,
+) {
+    match scheme {
+        CallScheme::DelegateCall => check!(interpreter, SPEC::enabled(HOMESTEAD)), // EIP-7: DELEGATECALL
+        CallScheme::StaticCall => check!(interpreter, SPEC::enabled(BYZANTIUM)), // EIP-214: New opcode STATICCALL
+        _ => (),
+    }
+    interpreter.return_data_buffer = Bytes::new();
+
+    let mut out_offset: usize = 0;
+    let mut out_len: usize = 0;
+    let mut call_input: Option<Box<CallInputs>> = None;
+    prepare_call_inputs::<SPEC>(
+        interpreter,
+        scheme,
+        host,
+        &mut out_len,
+        &mut out_offset,
+        &mut call_input,
+    );
+
+    let Some(mut call_input) = call_input else {
+        return;
+    };
+
+    // Call host to interact with target contract
+    let (reason, gas, return_data) = host.call(&mut call_input);
+
+    handle_call_result(
+        interpreter,
+        out_offset,
+        out_len,
+        &reason,
+        &gas,
+        &return_data,
+    );
 }

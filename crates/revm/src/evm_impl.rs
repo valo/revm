@@ -407,19 +407,13 @@ impl<'a, GSPEC: Spec, DB: Database, const INSPECT: bool> EVMImpl<'a, GSPEC, DB, 
         })
     }
 
-    /// EVM create opcode for both initial crate and CREATE and CREATE2 opcodes.
-    fn create_inner(&mut self, inputs: &CreateInputs) -> CreateResult {
-        let res = self.prepare_create(inputs);
-
-        let prepared_create = match res {
-            Ok(o) => o,
-            Err(e) => return e,
-        };
-
-        // Create new interpreter and execute initcode
-        let (exit_reason, mut interpreter) =
-            self.run_interpreter(prepared_create.contract, prepared_create.gas.limit(), false);
-
+    fn handle_create_result(
+        &mut self,
+        created_address: B160,
+        checkpoint: JournalCheckpoint,
+        interpreter: &mut Box<Interpreter>,
+        exit_reason: InstructionResult,
+    ) -> CreateResult {
         // Host error if present on execution
         match exit_reason {
             return_ok!() => {
@@ -428,12 +422,10 @@ impl<'a, GSPEC: Spec, DB: Database, const INSPECT: bool> EVMImpl<'a, GSPEC, DB, 
 
                 // EIP-3541: Reject new contract code starting with the 0xEF byte
                 if GSPEC::enabled(LONDON) && !bytes.is_empty() && bytes.first() == Some(&0xEF) {
-                    self.data
-                        .journaled_state
-                        .checkpoint_revert(prepared_create.checkpoint);
+                    self.data.journaled_state.checkpoint_revert(checkpoint);
                     return CreateResult {
                         result: InstructionResult::CreateContractStartingWithEF,
-                        created_address: Some(prepared_create.created_address),
+                        created_address: Some(created_address),
                         gas: interpreter.gas,
                         return_value: bytes,
                     };
@@ -450,12 +442,10 @@ impl<'a, GSPEC: Spec, DB: Database, const INSPECT: bool> EVMImpl<'a, GSPEC, DB, 
                             .limit_contract_code_size
                             .unwrap_or(MAX_CODE_SIZE)
                 {
-                    self.data
-                        .journaled_state
-                        .checkpoint_revert(prepared_create.checkpoint);
+                    self.data.journaled_state.checkpoint_revert(checkpoint);
                     return CreateResult {
                         result: InstructionResult::CreateContractSizeLimit,
-                        created_address: Some(prepared_create.created_address),
+                        created_address: Some(created_address),
                         gas: interpreter.gas,
                         return_value: bytes,
                     };
@@ -468,12 +458,10 @@ impl<'a, GSPEC: Spec, DB: Database, const INSPECT: bool> EVMImpl<'a, GSPEC, DB, 
                         // final gas fee for adding the contract code to the state, the contract
                         //  creation fails (i.e. goes out-of-gas) rather than leaving an empty contract.
                         if GSPEC::enabled(HOMESTEAD) {
-                            self.data
-                                .journaled_state
-                                .checkpoint_revert(prepared_create.checkpoint);
+                            self.data.journaled_state.checkpoint_revert(checkpoint);
                             return CreateResult {
                                 result: InstructionResult::OutOfGas,
-                                created_address: Some(prepared_create.created_address),
+                                created_address: Some(created_address),
                                 gas: interpreter.gas,
                                 return_value: bytes,
                             };
@@ -492,26 +480,45 @@ impl<'a, GSPEC: Spec, DB: Database, const INSPECT: bool> EVMImpl<'a, GSPEC, DB, 
                 };
                 self.data
                     .journaled_state
-                    .set_code(prepared_create.created_address, bytecode);
+                    .set_code(created_address, bytecode);
                 CreateResult {
                     result: InstructionResult::Return,
-                    created_address: Some(prepared_create.created_address),
+                    created_address: Some(created_address),
                     gas: interpreter.gas,
                     return_value: bytes,
                 }
             }
             _ => {
-                self.data
-                    .journaled_state
-                    .checkpoint_revert(prepared_create.checkpoint);
+                self.data.journaled_state.checkpoint_revert(checkpoint);
                 CreateResult {
                     result: exit_reason,
-                    created_address: Some(prepared_create.created_address),
+                    created_address: Some(created_address),
                     gas: interpreter.gas,
                     return_value: interpreter.return_value(),
                 }
             }
         }
+    }
+
+    /// EVM create opcode for both initial crate and CREATE and CREATE2 opcodes.
+    fn create_inner(&mut self, inputs: &CreateInputs) -> CreateResult {
+        let res = self.prepare_create(inputs);
+
+        let prepared_create = match res {
+            Ok(o) => o,
+            Err(e) => return e,
+        };
+
+        // Create new interpreter and execute initcode
+        let (exit_reason, mut interpreter) =
+            self.run_interpreter(prepared_create.contract, prepared_create.gas.limit(), false);
+
+        self.handle_create_result(
+            prepared_create.created_address,
+            prepared_create.checkpoint,
+            &mut interpreter,
+            exit_reason,
+        )
     }
 
     /// Create a Interpreter and run it.
