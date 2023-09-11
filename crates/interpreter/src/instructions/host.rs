@@ -230,6 +230,7 @@ pub fn selfdestruct<SPEC: Spec>(interpreter: &mut Interpreter, host: &mut dyn Ho
     interpreter.instruction_result = InstructionResult::SelfDestruct;
 }
 
+#[inline(never)]
 pub fn prepare_create_inputs<const IS_CREATE2: bool, SPEC: Spec>(
     interpreter: &mut Interpreter,
     create_inputs: &mut Option<Box<CreateInputs>>,
@@ -292,6 +293,7 @@ pub fn prepare_create_inputs<const IS_CREATE2: bool, SPEC: Spec>(
     }));
 }
 
+#[inline(never)]
 pub fn handle_create_result(
     interpreter: &mut Interpreter,
     result: (InstructionResult, Option<B160>, Gas, Bytes),
@@ -360,6 +362,7 @@ pub fn static_call<SPEC: Spec>(interpreter: &mut Interpreter, host: &mut dyn Hos
     call_inner::<SPEC>(interpreter, CallScheme::StaticCall, host);
 }
 
+#[inline(never)]
 fn prepare_call_inputs<SPEC: Spec>(
     interpreter: &mut Interpreter,
     scheme: CallScheme,
@@ -505,6 +508,7 @@ fn prepare_call_inputs<SPEC: Spec>(
     }));
 }
 
+#[inline(never)]
 fn handle_call_result(
     interpreter: &mut Interpreter,
     out_offset: usize,
