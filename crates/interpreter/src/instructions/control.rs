@@ -82,14 +82,14 @@ pub fn not_found<H: Host>(interpreter: &mut Interpreter<'_>, _host: &mut H) {
     interpreter.instruction_result = InstructionResult::OpcodeNotFound;
 }
 
-pub(super) fn stop(interpreter: &mut Interpreter, _host: &mut dyn Host) {
+pub fn stop(interpreter: &mut Interpreter, _host: &mut dyn Host) {
     interpreter.instruction_result = InstructionResult::Stop;
 }
 
-pub(super) fn invalid(interpreter: &mut Interpreter, _host: &mut dyn Host) {
+pub fn invalid(interpreter: &mut Interpreter, _host: &mut dyn Host) {
     interpreter.instruction_result = InstructionResult::InvalidFEOpcode;
 }
 
-pub(super) fn not_found(interpreter: &mut Interpreter, _host: &mut dyn Host) {
+pub fn not_found(interpreter: &mut Interpreter, _host: &mut dyn Host) {
     interpreter.instruction_result = InstructionResult::OpcodeNotFound;
 }

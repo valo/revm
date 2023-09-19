@@ -48,7 +48,7 @@ fn u256_remove_sign(val: &mut U256) {
 }
 
 #[inline(always)]
-pub(super) fn two_compl_mut(op: &mut U256) {
+pub fn two_compl_mut(op: &mut U256) {
     *op = two_compl(*op);
 }
 
