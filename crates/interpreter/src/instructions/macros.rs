@@ -17,6 +17,17 @@ macro_rules! check {
     };
 }
 
+macro_rules! gas_with_error {
+    ($interp:expr, $gas:expr) => {
+        if crate::USE_GAS {
+            if !$interp.gas.record_cost($gas) {
+                $interp.instruction_result = InstructionResult::OutOfGas;
+                return Err(InstructionResult::OutOfGas);
+            }
+        }
+    };
+}
+
 macro_rules! gas {
     ($interp:expr, $gas:expr) => {
         if crate::USE_GAS {
@@ -95,6 +106,25 @@ macro_rules! pop_address {
         // Safety: Length is checked above.
         let $x1 = Address::from_word(B256::from(unsafe { $interp.stack.pop_unsafe() }));
         let $x2 = Address::from_word(B256::from(unsafe { $interp.stack.pop_unsafe() }));
+    };
+}
+
+macro_rules! pop_with_error {
+    ($interp:expr, $x1:ident) => {
+        if $interp.stack.len() < 1 {
+            $interp.instruction_result = InstructionResult::StackUnderflow;
+            return Err(InstructionResult::StackUnderflow);
+        }
+        // Safety: Length is checked above.
+        let $x1 = unsafe { $interp.stack.pop_unsafe() };
+    };
+    ($interp:expr, $x1:ident, $x2:ident) => {
+        if $interp.stack.len() < 2 {
+            $interp.instruction_result = InstructionResult::StackUnderflow;
+            return Err(InstructionResult::StackUnderflow);
+        }
+        // Safety: Length is checked above.
+        let ($x1, $x2) = unsafe { $interp.stack.pop2_unsafe() };
     };
 }
 
@@ -212,6 +242,21 @@ macro_rules! as_usize_or_fail {
         if x[1] != 0 || x[2] != 0 || x[3] != 0 {
             $interp.instruction_result = $reason;
             return;
+        }
+        x[0] as usize
+    }};
+}
+
+macro_rules! as_usize_or_fail_with_error {
+    ($interp:expr, $v:expr) => {
+        as_usize_or_fail!($interp, $v, InstructionResult::InvalidOperandOOG)
+    };
+
+    ($interp:expr, $v:expr, $reason:expr) => {{
+        let x = $v.as_limbs();
+        if x[1] != 0 || x[2] != 0 || x[3] != 0 {
+            $interp.instruction_result = $reason;
+            return Err($reason);
         }
         x[0] as usize
     }};
