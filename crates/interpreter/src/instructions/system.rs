@@ -67,7 +67,7 @@ pub fn calldataload<H: Host>(interpreter: &mut Interpreter<'_>, _host: &mut H) {
         B256::ZERO
     };
 
-    push!(interpreter, load);
+    push!(interpreter, load.into());
 }
 
 pub fn calldatasize<H: Host>(interpreter: &mut Interpreter<'_>, _host: &mut H) {
